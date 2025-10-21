@@ -1,31 +1,52 @@
 pipeline {
     agent any
 
+    environment {
+        IMAGE_NAME = "myapp:latest"
+    }
+
     stages {
         stage('Checkout') {
             steps {
-                echo 'Fetching latest code...'
-                checkout scm
+                echo 'Cloning repository...'
+                git branch: 'main', url: 'https://github.com/manoharrmnhr/jenkins-cicd-pipeline.git'
             }
         }
 
-        stage('Build Docker Image') {
+        stage('Build') {
             steps {
                 echo 'Building Docker image...'
-                sh 'docker build -t myapp:latest .'
+                sh 'docker build -t $IMAGE_NAME .'
             }
         }
 
-        stage('Run Container') {
+        stage('Test') {
             steps {
-                echo 'Running container...'
-                // Stop and remove old container if exists
+                echo 'Running container for testing...'
+                sh 'docker run -d --name test_app -p 5000:5000 $IMAGE_NAME'
+                sleep 5
+                sh 'curl -f http://localhost:5000 || (echo "App failed to start!" && exit 1)'
+                sh 'docker stop test_app && docker rm test_app'
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                echo 'Deploying container...'
                 sh '''
-                docker stop myapp || true
-                docker rm myapp || true
-                docker run -d -p 5000:5000 --name myapp myapp:latest
+                    docker rm -f myapp || true
+                    docker run -d --name myapp -p 5000:5000 $IMAGE_NAME
                 '''
             }
+        }
+    }
+
+    post {
+        success {
+            echo '✅ Deployment successful!'
+        }
+        failure {
+            echo '❌ Pipeline failed!'
         }
     }
 }
